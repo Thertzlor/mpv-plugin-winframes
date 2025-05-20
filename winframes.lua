@@ -8,6 +8,7 @@ local opts = {
   ["exec-path"] = "ChangeScreenResolution.exe",
   ["winframes-blacklist"] = "",
   ["output-mode"] = "",
+  ["old-monitor-handling"] = false
 }
 
 mp.options.read_options(opts,"winframes")
@@ -233,7 +234,8 @@ end
 winframes_cfps = nil
 
 --we keep track if we changed the refresh rate of multiple monitors
-winframes_multi = false
+monitor_trigger = false
+multi_monitor = false
 
 -- for each output, we remember which refresh rate we set last, so
 -- we do not unnecessarily set the same refresh rate again
@@ -242,10 +244,11 @@ winframes_previously_set = {}
 function winframes_set_rate()
 
 	local f = mp.get_property_native("container-fps")
-	if (f == nil or f == winframes_cfps) then
+	if ( f == nil or (f == winframes_cfps and not monitor_trigger)) then
 		-- either no change or no frame rate information, so don't set anything
 		return
 	end
+  monitor_trigger = false
 	winframes_cfps = f
 
 	winframes_detect_available_rates()
@@ -320,12 +323,12 @@ end
 function winframes_set_old_rate()
 	
 	local outs = {}
-	if (#winframes_active_outputs == 0 or winframes_multi) then
+	if (#winframes_active_outputs == 0 or multi_monitor) then
 		-- No active outputs - probably because vo (like with vdpau) does
 		-- not provide the information which outputs are covered.
 		-- As a fall-back, let's assume all connected outputs are relevant.
 		-- If we set the refresh rate for multiple monitors, we also iterate all.
-		mp.msg.log("v","no output is known to be used by mpv, assuming all connected outputs are used.")
+		if not multi_monitor then mp.msg.log("v","no output is known to be used by mpv, assuming all connected outputs are used.") end
 		outs = winframes_connected_outputs
 	else
 		outs = winframes_active_outputs
@@ -376,8 +379,10 @@ end
 -- we'll consider setting refresh rates whenever the video fps or the active outputs change:
 mp.observe_property("container-fps", "native", winframes_set_rate)
 mp.observe_property("display-names", "native", function()
-	winframes_cfps = nil
-	winframes_multi  = true
+  if not opts["old-monitor-handling"] then
+    monitor_trigger  = true
+    multi_monitor = true
+  end
 	winframes_set_rate()
 end)
 
