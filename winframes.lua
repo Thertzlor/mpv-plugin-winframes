@@ -8,7 +8,9 @@ local opts = {
   ["exec-path"] = "ChangeScreenResolution.exe",
   ["winframes-blacklist"] = "",
   ["output-mode"] = "",
-  ["old-monitor-handling"] = false
+  ["old-monitor-handling"] = false,
+  ["wait-for-fullscreen"] = false,
+  ["restore-outside-fullscreen"] = false,
 }
 
 mp.options.read_options(opts,"winframes")
@@ -376,13 +378,23 @@ function winframes_set_old_rate()
 end
 
 -- we'll consider setting refresh rates whenever the video fps or the active outputs change:
-mp.observe_property("container-fps", "native", winframes_set_rate)
+mp.observe_property("container-fps", "native", function()
+  if opts["wait-for-fullscreen"] and not mp.get_property_bool("fullscreen")  then return end
+  winframes_set_rate()
+  end) 
 mp.observe_property("display-names", "native", function()
   if not opts["old-monitor-handling"] then
     monitor_trigger  = true
     multi_monitor = true
   end
-	winframes_set_rate()
+	if not opts["wait-for-fullscreen"] or mp.get_property_bool("fullscreen") then winframes_set_rate() end
+end)
+
+mp.observe_property("fullscreen", "bool",function(_,c)
+  if not opts["wait-for-fullscreen"] then return end
+  if c then winframes_set_rate() elseif opts["restore-outside-fullscreen"] then
+    winframes_set_old_rate()
+   end
 end)
 
 

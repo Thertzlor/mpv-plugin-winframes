@@ -74,6 +74,28 @@ you want to change to the "1920x1080" mode during playback, use:
 
  mpv --script-opts=winframes-output-mode=1920x1080 ...
 
+## Restricting refresh rate change to fullscreen
+
+Normally the script will adjust the refresh rate the moment a video starts playing.  
+With the "winframes-wait-for-fullscreen" option the adjustment will only take place once the player enters fullscreen mode. 
+
+ mpv --script-opts=winframes-wait-for-fullscreen=yes ...
+
+### Reverting changes on exiting full screen
+Once the refresh rate is changed, it is kept until the player exits.  
+The "winframes-restore-outside-fullscreen" option changes this behavior also revert when the player exits fullscreen mode.
+
+ mpv --script-opts=winframes-wait-for-fullscreen=yes,winframes-restore-outside-fullscreen=yes ...
+
+If the "winframes-wait-for-fullscreen" option is not enabled, this option has no effect.
+
+## Old screen change handling
+In the original xrandr plugin, changing the active display would only adjust the refresh rate if the framerate of the video also changed. This behavior is altered in this version, so that switching the player to another monitor will *always* check if that monitor's refresh rate also needs to be adjusted.
+
+If you prefer to retain 100% of the old screen handling logic you can restore it like this:
+
+mpv --script-opts=winframes-old-monitor-handling=yes ...
+
 
 DISCLAIMER
 ==========
