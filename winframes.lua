@@ -82,34 +82,35 @@ local function winframes_detect_available_rates()
 	
 	-- ChangeScreenResolution.exe doesn't show the which mode is currently active, so we need to query it separately.
 	
-	local p = {}
-	p["cancellable"] = false
-	p["args"] = {}
-	p["args"][1] = winframes_exec_path
-	p["args"][2] = "/l"
-	local res = utils.subprocess(p)
+  local p = {
+    name="subprocess",
+    playback_only=false,
+    capture_stdout = true,
+    args = {winframes_exec_path, "/l"}
+  }
+	local res = mp.command_native(p)
 
-	if (res["error"] ~= nil) then
-		mp.msg.log("info", "failed to execute '"..cmdToString(p).."', error message: " .. res["error"])
+	if (res.error_string ~= "") then
+		mp.msg.log("info", "failed to execute '"..cmdToString(p).."', error message: " .. res.error_string)
 		return
 	end
+  local q = {
+    name="subprocess",
+    playback_only=false,
+    capture_stdout = true,
+    args = {winframes_exec_path, "/m"}
+  }
+	local qes = mp.command_native(q)
 
-	local q = {}
-	q["cancellable"] = false
-	q["args"] = {}
-	q["args"][1] = winframes_exec_path
-	q["args"][2] = "/m"
-	local qes = utils.subprocess(q)
-
-	if (qes["error"] ~= nil) then
-		mp.msg.log("info", "failed to execute '"..cmdToString(q).."', error message: " .. qes["error"])
+	if (qes.error_string ~= "") then
+		mp.msg.log("info", "failed to execute '"..cmdToString(q).."', error message: " .. qes.error_string)
 		return
 	end
 	
 	
-	mp.msg.log("v",cmdToString(p).."\n" .. res["stdout"])
+	mp.msg.log("v",cmdToString(p).."\n" .. res.stdout)
 
-	for found in string.gmatch(res["stdout"], '(%[[^%[]+)') do
+	for found in string.gmatch(res.stdout, '(%[[^%[]+)') do
 
 		local currentSettings = trimmer(string.match(found,'Settings: ([^\\n]+)'))
 
@@ -124,7 +125,7 @@ local function winframes_detect_available_rates()
 
 			local matcher = trimmer(string.gsub(currentSettings,'@'..rate..'Hz','@(%%d+)Hz'))
 
-			local _, __, rawlist = string.find(qes["stdout"],'Display modes for '..output..':([^D]+)')
+			local _, __, rawlist = string.find(qes.stdout,'Display modes for '..output..':([^D]+)')
 			local mls = trimmer(rawlist)
 			
 			table.insert(winframes_connected_outputs, output)
@@ -294,23 +295,25 @@ local function winframes_set_rate()
 					mp.msg.log("v", "output " .. output .. " was already set to " .. bfr .. "Hz before - not changing")
 				else 
 					-- invoke ChangeScreenResolution to set the best fitting refresh rate for output 
-					local p = {}
-					p["cancellable"] = false
-					p["args"] = {
-						winframes_exec_path,
-						"/d="..winframes_modes[output].index,
-						"/f="..math.floor(bfr) -- ChangeScreenResolution doesn't accept decimals so 23.976 -> 23, 59.94 -> 59, etc
-					}
+					local p = {
+            name="subprocess",
+            playback_only = false,
+            args = {
+              winframes_exec_path,
+              "/d="..winframes_modes[output].index,
+              "/f="..math.floor(bfr) -- ChangeScreenResolution doesn't accept decimals so 23.976 -> 23, 59.94 -> 59, etc
+            }
+          }
 					if(winframes_modes[output].mode ~= winframes_modes[output].old_mode) then
-						p["args"][4] = "/w="..string.match(winframes_modes[output].mode, "^[0-9]+")
-						p["args"][5] = "/h="..string.match(winframes_modes[output].mode, "[0-9]+$")
+						p.args[#p.args+1] = "/w="..string.match(winframes_modes[output].mode, "^[0-9]+")
+						p.args[#p.args+1] = "/h="..string.match(winframes_modes[output].mode, "[0-9]+$")
 					end
 
 					mp.msg.log("debug", "executing as subprocess: \"" .. cmdToString(p) .. "\"")
-					local res = utils.subprocess(p)
+					local res = mp.command_native(p)
 
-					if (res["error"] ~= nil) then
-						mp.msg.log("error", "failed to set refresh rate for output " .. output .. " using ChangeScreenResolution, error message: " .. res["error"])
+					if (res.error_string ~= "") then
+						mp.msg.log("error", "failed to set refresh rate for output " .. output .. " using ChangeScreenResolution, error message: " .. res.error_string)
 					else
 						winframes_previously_set[output] = bfr
 					end
@@ -351,22 +354,24 @@ local function winframes_set_old_rate()
 				mp.msg.log("info", "switching output " .. output .. " that was set for replay to mode " .. winframes_modes[output].mode .. " at " .. winframes_previously_set[output] .. "Hz back to mode " .. winframes_modes[output].old_mode .. " with refresh rate " .. old_rate .. "Hz")
 
 				-- invoke ChangeScreenResolution to set the best fitting refresh rate for output 
-				local p = {}
-				p["cancellable"] = false
-				p["args"] = {
-					winframes_exec_path,
-					"/d=".. winframes_modes[output].index,
-					"/f="..math.floor(old_rate) -- ChangeScreenResolution doesn't accept decimals so 23.976 -> 23, 59.94 -> 59, etc
-				}
+				local p = {
+          name="subprocess",
+          playback_only = false,
+          args = {
+            winframes_exec_path,
+            "/d=".. winframes_modes[output].index,
+            "/f="..math.floor(old_rate) -- ChangeScreenResolution doesn't accept decimals so 23.976 -> 23, 59.94 -> 59, etc
+          }
+        }
 				if(winframes_modes[output].mode ~= winframes_modes[output].old_mode) then
-					p["args"][4] = "/w="..string.match(winframes_modes[output].old_mode, "^[0-9]+")
-					p["args"][5] = "/h="..string.match(winframes_modes[output].old_mode, "[0-9]+$")
+					p.args[#p.args+1] = "/w="..string.match(winframes_modes[output].old_mode, "^[0-9]+")
+					p.args[#p.args+1] = "/h="..string.match(winframes_modes[output].old_mode, "[0-9]+$")
 				end
 
-				local res = utils.subprocess(p)
+				local res = mp.command_native(p)
 
-				if (res["error"] ~= nil) then
-					mp.msg.log("error", "failed to set refresh rate for output " .. output .. " using xrandr, error message: " .. res["error"])
+				if (res.error_string ~= "") then
+					mp.msg.log("error", "failed to set refresh rate for output " .. output .. " using xrandr, error message: " .. res.error_string)
 				else
 					winframes_previously_set[output] = old_rate
 				end
