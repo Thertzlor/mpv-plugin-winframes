@@ -1,7 +1,7 @@
 -- use ChangeScreenResolution command to set output to best fitting fps rate
 --  when playing videos with mpv.
 
-utils = require 'mp.utils'
+local utils = require 'mp.utils'
 mp.options = require "mp.options"
 
 local opts = {
@@ -17,12 +17,12 @@ mp.options.read_options(opts,"winframes")
 
 -- if you want your display output switched to a certain mode during playback,
 --  use e.g. "--script-opts=winframes-output-mode=1920x1080"
-winframes_output_mode = opts["output-mode"]
+local winframes_output_mode = opts["output-mode"]
 
-winframes_exec_path = opts["exec-path"] --mp.get_opt("winframes-exec-path") or 'ChangeScreenResolution.exe'
+local winframes_exec_path = opts["exec-path"] --mp.get_opt("winframes-exec-path") or 'ChangeScreenResolution.exe'
 
-winframes_blacklist = {}
-function winframes_parse_blacklist()
+local winframes_blacklist = {}
+local function winframes_parse_blacklist()
    -- use e.g. "--script-opts=winframes-blacklist=25" to have xrand.lua not use 25Hz refresh rate
 
 	-- Parse the optional "blacklist" from a string into an array for later use.
@@ -54,7 +54,7 @@ local function trimmer(s)
 	return string.gsub(string.gsub(s or '', '^%s+', ''),'%s+$','')
 end
 
-function winframes_check_blacklist(mode, rate)
+local function winframes_check_blacklist(mode, rate)
 	-- check if (mode, rate) is black-listed - e.g. because the
 	--  computer display output is known to be incompatible with the
 	--  display at this specific mode/rate 
@@ -71,10 +71,10 @@ function winframes_check_blacklist(mode, rate)
 	return false
 end
 
-winframes_detect_done = false
-winframes_modes = {}
-winframes_connected_outputs = {}
-function winframes_detect_available_rates()
+local winframes_detect_done = false
+local winframes_modes = {}
+local winframes_connected_outputs = {}
+local function winframes_detect_available_rates()
 	if (winframes_detect_done) then
 		return
 	end
@@ -171,7 +171,7 @@ function winframes_detect_available_rates()
 	end
 end
 
-function winframes_find_best_fitting_rate(fps, output)
+local function winframes_find_best_fitting_rate(fps, output)
 	local winframes_rates = winframes_modes[output].rates
 	mp.msg.log("info", "output " .. output .. " fps=" .. fps.." available rates="..#winframes_rates)
 
@@ -219,8 +219,8 @@ function winframes_find_best_fitting_rate(fps, output)
 end
 
 
-winframes_active_outputs = {}
-function winframes_set_active_outputs()
+local winframes_active_outputs = {}
+local function winframes_set_active_outputs()
 	local dn = mp.get_property("display-names")
 	
 	if (dn ~= nil) then
@@ -233,17 +233,17 @@ function winframes_set_active_outputs()
 end
 
 -- last detected non-nil video frame rate:
-winframes_cfps = nil
+local winframes_cfps = nil
 
 --we keep track if we changed the refresh rate of multiple monitors
-monitor_trigger = false
-multi_monitor = false
+local monitor_trigger = false
+local multi_monitor = false
 
 -- for each output, we remember which refresh rate we set last, so
 -- we do not unnecessarily set the same refresh rate again
-winframes_previously_set = {}
+local winframes_previously_set = {}
 
-function winframes_set_rate()
+local function winframes_set_rate()
 
 	local f = mp.get_property_native("container-fps")
 	if ( f == nil or (f == winframes_cfps and not monitor_trigger)) then
@@ -321,7 +321,7 @@ function winframes_set_rate()
 end
 
 
-function winframes_set_old_rate()
+local function winframes_set_old_rate()
 	
 	local outs = {}
 	if (#winframes_active_outputs == 0 or multi_monitor) then
