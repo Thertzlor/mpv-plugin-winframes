@@ -4,7 +4,7 @@ mpv-plugin-winframes
 mpv plugin for setting display output parameters, e.g. the refresh rate,
 automatically to the best suitable value for playing the current file.
 
-This is a Windows version of the plugin [mpv-plugin-xrandr](https://gitlab.com/lvml/mpv-plugin-xrandr/) by Lutz Vieweg and utilizes the tool [ChangeScreenResolution.exe](https://www.tools.taubenkorb.at/change-screen-resolution/) as a stand-in for xrandr.
+This is a Windows version of the plugin [mpv-plugin-xrandr](https://gitlab.com/lvml/mpv-plugin-xrandr/) by Lutz Vieweg and utilizes the tool [ChangeScreenResolution.exe](https://www.tools.taubenkorb.at/change-screen-resolution/) as a stand-in for xrandr. It retains full compatibility with all its features and options.
 
 Rationale / Use Case:
 =====================
@@ -43,9 +43,11 @@ Usage:
 Options:
 ========
 
-Normally, you won't need to specify any options.
+Normally, you won't need to specify any options besides `winframes-exec-path`.
 
  mpv --script-opts=winframes-blacklist=25 ...
+
+All options can also be permanently defined in a winframes.conf file in the script-opts directory.
 
 ## Optional blacklisting refresh rates:
 
