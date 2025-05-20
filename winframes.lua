@@ -274,7 +274,6 @@ function winframes_set_rate()
 	else
 		outs = winframes_active_outputs
 	end
-	mp.msg.log("info", "let's get outputs")
 		
 	-- iterate over all relevant outputs used by mpv's output:
 	for n, output in ipairs(outs) do
