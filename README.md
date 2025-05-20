@@ -21,7 +21,7 @@ for each video you play is annoying, so this plugin aims at
 automatizing this task.
 
 ## Why winframes?
-While they are multiple nircmd based mpv scripts for changing the refresh rate on windows, they are far less flexible than the xrandr plugin due to the limitations of nircmd, which can only set but not read display information, requiring the user to provide a list of valid refresh rates which becomes problematic when using multiple displays with different capabilties.
+While there are [multiple](https://github.com/CogentRedTester/mpv-changerefresh) nircmd based mpv [scripts](https://github.com/kevinlekiller/mpv_scripts/tree/master/autospeedwin) for changing the refresh rate on windows, they are far less flexible than the xrandr plugin due to the limitations of nircmd, which can only set but not read display information, requiring the user to provide a list of valid refresh rates which becomes problematic when using multiple displays with different capabilties.
 
 ChangeScreenResolution on the other hand has (almost) all capabilties of xrandr allowing this plugin to retain the automatic detection of the optimal refresh rate.
 
