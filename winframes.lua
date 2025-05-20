@@ -1,44 +1,57 @@
--- use xrandr command to set output to best fitting fps rate
+-- use ChangeScreenResolution command to set output to best fitting fps rate
 --  when playing videos with mpv.
 
 utils = require 'mp.utils'
 
 -- if you want your display output switched to a certain mode during playback,
---  use e.g. "--script-opts=xrandr-output-mode=1920x1080"
-xrandr_output_mode = mp.get_opt("xrandr-output-mode")
+--  use e.g. "--script-opts=winframes-output-mode=1920x1080"
+winframes_output_mode = mp.get_opt("winframes-output-mode")
 
-xrandr_blacklist = {}
-function xrandr_parse_blacklist()
-   -- use e.g. "--script-opts=xrandr-blacklist=25" to have xrand.lua not use 25Hz refresh rate
+winframes_exec_path = mp.get_opt("winframes-exec-path") or 'ChangeScreenResolution.exe'
+
+winframes_blacklist = {}
+function winframes_parse_blacklist()
+   -- use e.g. "--script-opts=winframes-blacklist=25" to have xrand.lua not use 25Hz refresh rate
 
 	-- Parse the optional "blacklist" from a string into an array for later use.
 	-- For now, we only support a list of rates, since the "mode" is not subject
 	--  to automatic change (mpv is better at scaling than most displays) and
 	--  this also makes the blacklist option more easy to specify:
-	local b = mp.get_opt("xrandr-blacklist")
+	local b = mp.get_opt("winframes-blacklist")
 	if (b == nil) then
 		return
 	end
 	
 	local i = 1
 	for s in string.gmatch(b, "([^, ]+)") do
-		xrandr_blacklist[i] = 0.0 + s
+		winframes_blacklist[i] = 0.0 + s
 		i = i+1
 	end
 end
-xrandr_parse_blacklist()
+winframes_parse_blacklist()
 
+local function cmdToString(p)
+	local cmd_as_string = ""
+	for k, v in pairs(p["args"]) do
+		cmd_as_string = cmd_as_string .. v .. " "
+	end
+	return cmd_as_string
+end
 
-function xrandr_check_blacklist(mode, rate)
+local function trimmer(s)
+	return string.gsub(string.gsub(s or '', '^%s+', ''),'%s+$','')
+end
+
+function winframes_check_blacklist(mode, rate)
 	-- check if (mode, rate) is black-listed - e.g. because the
 	--  computer display output is known to be incompatible with the
 	--  display at this specific mode/rate 
 	
-	for i=1,#xrandr_blacklist do
-		r = xrandr_blacklist[i]
+	for i=1,#winframes_blacklist do
+		r = winframes_blacklist[i]
 		
 		if (r == rate) then
-			mp.msg.log("v", "will not use mode '" .. mode .. "' with rate " .. rate .. " because option --script-opts=xrandr-blacklist said so")
+			mp.msg.log("v", "will not use mode '" .. mode .. "' with rate " .. rate .. " because option --script-opts=winframes-blacklist said so")
 			return true
 		end
 	end
@@ -46,120 +59,118 @@ function xrandr_check_blacklist(mode, rate)
 	return false
 end
 
-xrandr_detect_done = false
-xrandr_modes = {}
-xrandr_connected_outputs = {}
-function xrandr_detect_available_rates()
-	if (xrandr_detect_done) then
+winframes_detect_done = false
+winframes_modes = {}
+winframes_connected_outputs = {}
+function winframes_detect_available_rates()
+	if (winframes_detect_done) then
 		return
 	end
-	xrandr_detect_done = true
+	winframes_detect_done = true
 	
-	-- invoke xrandr to find out which fps rates are available on which outputs
+	-- ChangeScreenResolution.exe doesn't show the which mode is currently active, so we need to query it separately.
 	
 	local p = {}
 	p["cancellable"] = false
 	p["args"] = {}
-	p["args"][1] = "xrandr"
-	p["args"][2] = "-q"
+	p["args"][1] = winframes_exec_path
+	p["args"][2] = "/l"
 	local res = utils.subprocess(p)
-	
+
 	if (res["error"] ~= nil) then
-		mp.msg.log("info", "failed to execute 'xrand -q', error message: " .. res["error"])
+		mp.msg.log("info", "failed to execute '"..cmdToString(p).."', error message: " .. res["error"])
+		return
+	end
+
+	local q = {}
+	q["cancellable"] = false
+	q["args"] = {}
+	q["args"][1] = winframes_exec_path
+	q["args"][2] = "/m"
+	local qes = utils.subprocess(q)
+
+	if (qes["error"] ~= nil) then
+		mp.msg.log("info", "failed to execute '"..cmdToString(q).."', error message: " .. qes["error"])
 		return
 	end
 	
-	mp.msg.log("v","xrandr -q\n" .. res["stdout"])
-
-	local output_idx = 1
-	for output in string.gmatch(res["stdout"], '\n([^ ]+) connected') do
-		
-		table.insert(xrandr_connected_outputs, output)
-		
-		-- the first line with a "*" after the match contains the rates associated with the current mode
-		local mls = string.match(res["stdout"], "\n" .. string.gsub(output, "%p", "%%%1") .. " connected.*")
-		local r
-		local mode = nil
-		local old_rate
-		local old_mode
-		
-		-- old_rate = 0 means "no old rate known to switch to after playback"
-		old_rate = 0
-		
-		if (xrandr_output_mode ~= nil) then		
-			-- special case: user specified a certain preferred mode to use for playback
-			mp.msg.log("v", "looking for refresh rates for user supplied output mode " .. xrandr_output_mode)
-			mode, r = string.match(mls, '\n   (' .. xrandr_output_mode .. ') ([^\n]+)')
-			
-			if (mode == nil) then
-				mp.msg.log("info", "user preferred output mode " .. xrandr_output_mode .. " not found for output " .. output .. " - will use current mode")
-			else 
-				mp.msg.log("info", "using user preferred xrandr_output_mode " .. xrandr_output_mode .. " for output " .. output)
-				-- try to find the "old rate" for the other, currently active mode
-				local oldr
-				old_mode, oldr = string.match(mls, '\n   ([0-9x]+) ([^*\n]*%*[^\n]*)')
-				if (oldr ~= nil) then
-					for s in string.gmatch(oldr, "([^ ]+)%*") do
-						old_rate = s
-					end
-				end
-				mp.msg.log("v", "old_rate=" .. old_rate .. " found for old_mode=" .. tostring(old_mode))
-			end
-		end
-		
-		if (mode == nil) then
-			-- normal case: use current mode
-			mode, r = string.match(mls, '\n   ([0-9x]+) ([^*\n]*%*[^\n]*)')
-			old_mode = mode
-		end
-		
-		if (r == nil) then
-			-- if no refresh rate is reported active for an output by xrandr,
-			-- search for the mode that is "recommended" (marked by "+" in xrandr's output)
-			mode, r = string.match(mls, '\n   ([0-9x]+) ([^+\n]*%+[^\n]*)')
-			old_mode = mode
-			if (r == nil) then 
-				-- there is not even a "recommended" mode, so let's just use
-				-- whatever first mode line there is
-				mode, r = string.match(mls, '\n   ([0-9x]+) ([^+\n]*[^\n]*)')
-			old_mode = mode
-			end
-		else
-			-- so "r" contains a hint to the current ("old") rate, let's remember
-			--  it for later switching back to it.
-			for s in string.gmatch(r, "([^ ]+)%*") do
-				old_rate = s
-			end
-		end
-		mp.msg.log("info", "output " .. output .. " mode=" .. mode .. " old rate=" .. old_rate .. " refresh rates = " .. r)
-		
-		xrandr_modes[output] = { mode = mode, old_mode = old_mode, rates_s = r, rates = {}, old_rate = old_rate }
-		local i = 1
-		for s in string.gmatch(r, "([^ +*]+)") do
-			
-			-- check if rate "r" is black-listed - this is checked here because 
-			if (not xrandr_check_blacklist(mode, 0.0 + s)) then
-				xrandr_modes[output].rates[i] = 0.0 + s
-				i = i+1
-			end
-		end
-		
-		output_idx = output_idx + 1
-	end
 	
+	mp.msg.log("v",cmdToString(p).."\n" .. res["stdout"])
+
+	for found in string.gmatch(res["stdout"], '(%[[^%[]+)') do
+
+		local currentSettings = trimmer(string.match(found,'Settings: ([^\\n]+)'))
+
+		--displays without settings are definitely not connected
+		if currentSettings ~= '' then
+
+			local index = trimmer(string.match(found,'^%[(%d+)%]'))
+
+			local output = trimmer(string.match(found,'^%[%d+%] +([^\n ]+)'))
+
+			local old_mode,rate = string.match(currentSettings,'([0-9x]+) %d+bit @(%d+)Hz .+')
+
+			local matcher = trimmer(string.gsub(currentSettings,'@'..rate..'Hz','@(%%d+)Hz'))
+
+			local _, __, rawlist = string.find(qes["stdout"],'Display modes for '..output..':([^D]+)')
+			local mls = trimmer(rawlist)
+			
+			table.insert(winframes_connected_outputs, output)
+			
+			-- the first line with a "*" after the match contains the rates associated with the current mode
+			-- local mls = string.match(res["stdout"], "\n" .. string.gsub(output, "%p", "%%%1") .. " connected.*")
+			local mode = nil
+
+			-- old_rate = 0 means "no old rate known to switch to after playback"
+			local old_rate = 0.0+trimmer(rate)
+			
+			
+			if (winframes_output_mode ~= nil) then		
+				local specialMatcher = trimmer(string.gsub(matcher,'^'..old_mode,winframes_output_mode))
+				-- special case: user specified a certain preferred mode to use for playback
+				mp.msg.log("v", "looking for refresh rates for user supplied output mode " .. winframes_output_mode)
+				found = string.match(mls, specialMatcher)
+				if (mode == nil) then
+					mp.msg.log("info", "user preferred output mode " .. winframes_output_mode .. " not found for output " .. output .. " - will use current mode")
+					mode = old_mode
+				else 
+					mp.msg.log("info", "using user preferred winframes_output_mode " .. winframes_output_mode .. " for output " .. output)
+					matcher = specialMatcher
+					mode = winframes_output_mode
+					mp.msg.log("v", "old_rate=" .. old_rate .. " found for old_mode=" .. tostring(old_mode))
+				end
+			else
+				mode = old_mode
+			end
+
+			
+			mp.msg.log("info", "output " .. output .. " mode=" .. mode .. " old rate=" .. old_rate)
+			
+			winframes_modes[output] = { index=index, mode = mode, old_mode = old_mode, rates = {}, old_rate = old_rate }
+			for s in string.gmatch(mls, matcher) do
+				-- check if rate "r" is black-listed - this is checked here because 
+				if (not winframes_check_blacklist(mode, 0.0 + s)) then
+					winframes_modes[output].rates[#winframes_modes[output].rates+1] = 0.0 + s
+				end
+			end
+			
+
+		end
+	end
 end
 
-function xrandr_find_best_fitting_rate(fps, output)
-	
-	local xrandr_rates = xrandr_modes[output].rates
+function winframes_find_best_fitting_rate(fps, output)
+	local winframes_rates = winframes_modes[output].rates
+	mp.msg.log("info", "output " .. output .. " fps=" .. fps.." available rates="..#winframes_rates)
+
 	
   local best_fitting_rate = nil
   local best_fitting_ratio = math.huge
   
 	-- try integer multipliers of 1 to 10 (given that high-fps displays exist these days)
 	for m=1,10 do
-		for i=1,#xrandr_rates do
-			local r = xrandr_rates[i]
+		for i=1,#winframes_rates do
+			local r = winframes_rates[i]
 			local ratio = r / (m * fps)
       if (ratio < 1.0) then
         ratio = 1.0 / ratio
@@ -181,7 +192,7 @@ function xrandr_find_best_fitting_rate(fps, output)
         best_fitting_ratio = ratio
         -- the xrand -q output may print nearby frequencies as the same
         -- rounded numbers - therefore, if our multiplier is == 1,
-        -- we better return the video's frame rate, which xrandr
+        -- we better return the video's frame rate, which ChangeScreenResolution
         -- is then likely to set the best rate for, even if the mode
         -- has some "odd" rate
         if (m == 1) then
@@ -196,175 +207,155 @@ function xrandr_find_best_fitting_rate(fps, output)
 end
 
 
-xrandr_active_outputs = {}
-function xrandr_set_active_outputs()
+winframes_active_outputs = {}
+function winframes_set_active_outputs()
 	local dn = mp.get_property("display-names")
 	
 	if (dn ~= nil) then
 		mp.msg.log("v","display-names=" .. dn)
-		xrandr_active_outputs = {}
+		winframes_active_outputs = {}
 		for w in (dn .. ","):gmatch("([^,]*),") do 
-			table.insert(xrandr_active_outputs, w)
+			table.insert(winframes_active_outputs, w)
 		end
 	end
 end
 
 -- last detected non-nil video frame rate:
-xrandr_cfps = nil
+winframes_cfps = nil
+
+--we keep track if we changed the refresh rate of multiple monitors
+winframes_multi = false
 
 -- for each output, we remember which refresh rate we set last, so
 -- we do not unnecessarily set the same refresh rate again
-xrandr_previously_set = {}
+winframes_previously_set = {}
 
-function xrandr_set_rate()
+function winframes_set_rate()
 
 	local f = mp.get_property_native("container-fps")
-	if (f == nil or f == xrandr_cfps) then
+	if (f == nil or f == winframes_cfps) then
 		-- either no change or no frame rate information, so don't set anything
 		return
 	end
-	xrandr_cfps = f
+	winframes_cfps = f
 
-	xrandr_detect_available_rates()
+	winframes_detect_available_rates()
 	
-	xrandr_set_active_outputs()
-	
-	local vdpau_hack = false
-	local old_vid = nil
-	local old_position = nil
-	if (mp.get_property("options/vo") == "vdpau" or mp.get_property("options/hwdec") == "vdpau") then
-		-- enable wild hack: need to close and re-open video for vdpau,
-		-- because vdpau barfs if xrandr is run while it is in use
-		
-		vdpau_hack = true
-		old_position = mp.get_property("time-pos")
-		old_vid = mp.get_property("vid")
-		mp.set_property("vid", "no")
-	end
-
+	winframes_set_active_outputs()
    -- unless "--script-opts=xrandr-ignore_unknown_oldrate=true" is set, 
 	--  xrandr.lua will not touch display outputs for which it cannot
 	--  get information on the current refresh rate for - assuming that
 	--  such outputs are "disabled" somehow.
-	local ignore_unknown_oldrate = mp.get_opt("xrandr-ignore_unknown_oldrate")
+	local ignore_unknown_oldrate = mp.get_opt("winframes-ignore_unknown_oldrate")
 	if (ignore_unknown_oldrate == nil) then
 		ignore_unknown_oldrate = false
 	end
 
-	
+
 	local outs = {}
-	if (#xrandr_active_outputs == 0) then
+	if (#winframes_active_outputs == 0) then
 		-- No active outputs - probably because vo (like with vdpau) does
 		-- not provide the information which outputs are covered.
 		-- As a fall-back, let's assume all connected outputs are relevant.
 		mp.msg.log("v","no output is known to be used by mpv, assuming all connected outputs are used.")
-		outs = xrandr_connected_outputs
+		outs = winframes_connected_outputs
 	else
-		outs = xrandr_active_outputs
+		outs = winframes_active_outputs
 	end
+	mp.msg.log("info", "let's get outputs")
 		
 	-- iterate over all relevant outputs used by mpv's output:
 	for n, output in ipairs(outs) do
 		
-		if (ignore_unknown_oldrate == false and xrandr_modes[output].old_rate == 0) then
-			mp.msg.log("info", "not touching output " .. output .. " because xrandr did not indicate a used refresh rate for it - use --script-opts=xrandr-ignore_unknown_oldrate=true if that is not what you want.")
+		if (ignore_unknown_oldrate == false and winframes_modes[output].old_rate == 0) then
+			mp.msg.log("info", "not touching output " .. output .. " because winframes did not indicate a used refresh rate for it - use --script-opts=winframes-ignore_unknown_oldrate=true if that is not what you want.")
 		else
-			local bfr = xrandr_find_best_fitting_rate(xrandr_cfps, output)
+			local bfr = winframes_find_best_fitting_rate(winframes_cfps, output)
 
 			if (bfr == 0.0) then
-				mp.msg.log("info", "no non-blacklisted rate available, not invoking xrandr")
+				mp.msg.log("info", "no non-blacklisted rate available, not invoking winframes")
 			else
-				mp.msg.log("info", "container fps is " .. xrandr_cfps .. "Hz, for output " .. output .. " mode " .. xrandr_modes[output].mode .. " the best fitting display rate we will pass to xrandr is " .. bfr .. "Hz")
+				mp.msg.log("info", "container fps is " .. winframes_cfps .. "Hz, for output " .. output .. " mode " .. winframes_modes[output].mode .. " the best fitting display rate we will pass to winframes is " .. bfr .. "Hz")
 
-				if (bfr == xrandr_previously_set[output]) then
+				if (bfr == winframes_previously_set[output]) then
 					mp.msg.log("v", "output " .. output .. " was already set to " .. bfr .. "Hz before - not changing")
 				else 
-					-- invoke xrandr to set the best fitting refresh rate for output 
+					-- invoke ChangeScreenResolution to set the best fitting refresh rate for output 
 					local p = {}
 					p["cancellable"] = false
-					p["args"] = {}
-					p["args"][1] = "xrandr"
-					p["args"][2] = "--output"
-					p["args"][3] = output
-					p["args"][4] = "--mode"
-					p["args"][5] = xrandr_modes[output].mode
-					p["args"][6] = "--rate"
-					p["args"][7] = tostring(bfr)
-
-					local cmd_as_string = ""
-					for k, v in pairs(p["args"]) do
-						cmd_as_string = cmd_as_string .. v .. " "
+					p["args"] = {
+						winframes_exec_path,
+						"/d="..winframes_modes[output].index,
+						"/f="..math.floor(bfr) -- ChangeScreenResolution doesn't accept decimals so 23.976 -> 23, 59.94 -> 59, etc
+					}
+					if(winframes_modes[output].mode ~= winframes_modes[output].old_mode) then
+						p["args"][4] = "/w="..string.match(winframes_modes[output].mode, "^[0-9]+")
+						p["args"][5] = "/h="..string.match(winframes_modes[output].mode, "[0-9]+$")
 					end
-					mp.msg.log("debug", "executing as subprocess: \"" .. cmd_as_string .. "\"")
+
+					mp.msg.log("debug", "executing as subprocess: \"" .. cmdToString(p) .. "\"")
 					local res = utils.subprocess(p)
 
 					if (res["error"] ~= nil) then
-						mp.msg.log("error", "failed to set refresh rate for output " .. output .. " using xrandr, error message: " .. res["error"])
+						mp.msg.log("error", "failed to set refresh rate for output " .. output .. " using ChangeScreenResolution, error message: " .. res["error"])
 					else
-						xrandr_previously_set[output] = bfr
+						winframes_previously_set[output] = bfr
 					end
 				end
 			end
 		end
 	end
-	
-	if (vdpau_hack) then
-		mp.set_property("vid", old_vid)
-		if (old_position ~= nil) then
-    		mp.commandv("seek", old_position, "absolute", "keyframes")
-		else
-    		mp.msg.log("v", "old_position is 'nil' - not seeking after vdpau re-initialization")
-		end
-	end
 end
 
 
-function xrandr_set_old_rate()
+function winframes_set_old_rate()
 	
 	local outs = {}
-	if (#xrandr_active_outputs == 0) then
+	if (#winframes_active_outputs == 0 or winframes_multi) then
 		-- No active outputs - probably because vo (like with vdpau) does
 		-- not provide the information which outputs are covered.
 		-- As a fall-back, let's assume all connected outputs are relevant.
+		-- If we set the refresh rate for multiple monitors, we also iterate all.
 		mp.msg.log("v","no output is known to be used by mpv, assuming all connected outputs are used.")
-		outs = xrandr_connected_outputs
+		outs = winframes_connected_outputs
 	else
-		outs = xrandr_active_outputs
+		outs = winframes_active_outputs
 	end
 		
 	-- iterate over all relevant outputs used by mpv's output:
 	for n, output in ipairs(outs) do
 		
-		local old_rate = xrandr_modes[output].old_rate
+		local old_rate = winframes_modes[output].old_rate
 		
-		if (old_rate == 0 or xrandr_previously_set[output] == nil ) then
+		if (old_rate == 0 or winframes_previously_set[output] == nil ) then
 			mp.msg.log("v", "no previous frame rate known for output " .. output .. " - so no switching back.")
 		else
 
-			if (math.abs(old_rate-xrandr_previously_set[output]) < 0.001) then
+			if (math.abs(old_rate-winframes_previously_set[output]) < 0.001) then
 				mp.msg.log("v", "output " .. output .. " is already set to " .. old_rate .. "Hz - no switching back required")
 			else 
 
-				mp.msg.log("info", "switching output " .. output .. " that was set for replay to mode " .. xrandr_modes[output].mode .. " at " .. xrandr_previously_set[output] .. "Hz back to mode " .. xrandr_modes[output].old_mode .. " with refresh rate " .. old_rate .. "Hz")
+				mp.msg.log("info", "switching output " .. output .. " that was set for replay to mode " .. winframes_modes[output].mode .. " at " .. winframes_previously_set[output] .. "Hz back to mode " .. winframes_modes[output].old_mode .. " with refresh rate " .. old_rate .. "Hz")
 
-				-- invoke xrandr to set the best fitting refresh rate for output 
+				-- invoke ChangeScreenResolution to set the best fitting refresh rate for output 
 				local p = {}
 				p["cancellable"] = false
-				p["args"] = {}
-				p["args"][1] = "xrandr"
-				p["args"][2] = "--output"
-				p["args"][3] = output
-				p["args"][4] = "--mode"
-				p["args"][5] = xrandr_modes[output].old_mode
-				p["args"][6] = "--rate"
-				p["args"][7] = old_rate
+				p["args"] = {
+					winframes_exec_path,
+					"/d=".. winframes_modes[output].index,
+					"/f="..math.floor(old_rate) -- ChangeScreenResolution doesn't accept decimals so 23.976 -> 23, 59.94 -> 59, etc
+				}
+				if(winframes_modes[output].mode ~= winframes_modes[output].old_mode) then
+					p["args"][4] = "/w="..string.match(winframes_modes[output].old_mode, "^[0-9]+")
+					p["args"][5] = "/h="..string.match(winframes_modes[output].old_mode, "[0-9]+$")
+				end
 
 				local res = utils.subprocess(p)
 
 				if (res["error"] ~= nil) then
 					mp.msg.log("error", "failed to set refresh rate for output " .. output .. " using xrandr, error message: " .. res["error"])
 				else
-					xrandr_previously_set[output] = old_rate
+					winframes_previously_set[output] = old_rate
 				end
 			end
 		end
@@ -374,8 +365,13 @@ function xrandr_set_old_rate()
 end
 
 -- we'll consider setting refresh rates whenever the video fps or the active outputs change:
-mp.observe_property("container-fps", "native", xrandr_set_rate)
-mp.observe_property("display-names", "native", xrandr_set_rate)
+mp.observe_property("container-fps", "native", winframes_set_rate)
+mp.observe_property("display-names", "native", function()
+	winframes_cfps = nil
+	winframes_multi  = true
+	winframes_set_rate()
+end)
+
 
 -- and we'll try to revert the refresh rate when mpv is shut down
-mp.register_event("shutdown", xrandr_set_old_rate)
+mp.register_event("shutdown", winframes_set_old_rate)
