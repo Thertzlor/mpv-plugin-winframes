@@ -175,7 +175,12 @@ end
 local function winframes_find_best_fitting_rate(fps, output)
 	local winframes_rates = winframes_modes[output].rates
 	mp.msg.log("info", "output " .. output .. " fps=" .. fps.." available rates="..#winframes_rates)
-
+  local ratis = ""
+  for i = 1, #winframes_rates do
+    ratis = ratis..";"..winframes_rates[i]
+  end
+  mp.msg.log("info","THE RATES: "..ratis)
+  local fps_rounded = math.floor(fps)
 	
   local best_fitting_rate = nil
   local best_fitting_ratio = math.huge
@@ -184,7 +189,7 @@ local function winframes_find_best_fitting_rate(fps, output)
 	for m=1,10 do
 		for i=1,#winframes_rates do
 			local r = winframes_rates[i]
-			local ratio = r / (m * fps)
+			local ratio = r / (m * (m==1 and fps_rounded or fps))
       if (ratio < 1.0) then
         ratio = 1.0 / ratio
       end
