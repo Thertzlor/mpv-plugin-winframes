@@ -2,12 +2,21 @@
 --  when playing videos with mpv.
 
 utils = require 'mp.utils'
+mp.options = require "mp.options"
+
+local opts = {
+  ["exec-path"] = "ChangeScreenResolution.exe",
+  ["winframes-blacklist"] = "",
+  ["output-mode"] = "",
+}
+
+mp.options.read_options(opts,"winframes")
 
 -- if you want your display output switched to a certain mode during playback,
 --  use e.g. "--script-opts=winframes-output-mode=1920x1080"
-winframes_output_mode = mp.get_opt("winframes-output-mode")
+winframes_output_mode = opts["output-mode"]
 
-winframes_exec_path = mp.get_opt("winframes-exec-path") or 'ChangeScreenResolution.exe'
+winframes_exec_path = opts["exec-path"] --mp.get_opt("winframes-exec-path") or 'ChangeScreenResolution.exe'
 
 winframes_blacklist = {}
 function winframes_parse_blacklist()
@@ -17,8 +26,8 @@ function winframes_parse_blacklist()
 	-- For now, we only support a list of rates, since the "mode" is not subject
 	--  to automatic change (mpv is better at scaling than most displays) and
 	--  this also makes the blacklist option more easy to specify:
-	local b = mp.get_opt("winframes-blacklist")
-	if (b == nil) then
+	local b = opts["winframes-blacklist"]
+	if (b == "") then
 		return
 	end
 	
@@ -125,7 +134,7 @@ function winframes_detect_available_rates()
 			local old_rate = 0.0+trimmer(rate)
 			
 			
-			if (winframes_output_mode ~= nil) then		
+			if (winframes_output_mode ~= "") then		
 				local specialMatcher = trimmer(string.gsub(matcher,'^'..old_mode,winframes_output_mode))
 				-- special case: user specified a certain preferred mode to use for playback
 				mp.msg.log("v", "looking for refresh rates for user supplied output mode " .. winframes_output_mode)
