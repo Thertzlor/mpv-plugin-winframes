@@ -40,6 +40,11 @@ Usage:
 
 (Or copy winframes.lua to ~/.config/mpv/scripts/ for permanent default usage.)
 
+Shortcuts :
+========
+The script adds the shortcut **Ctrl+f** to toggle refresh rate adjustment on and off.  
+This is mostly useful in conjunction with the --wait-for-fullscreen option.
+
 Options:
 ========
 

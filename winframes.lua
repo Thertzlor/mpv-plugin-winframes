@@ -21,6 +21,8 @@ local winframes_output_mode = opts["output-mode"]
 
 local winframes_exec_path = opts["exec-path"] --mp.get_opt("winframes-exec-path") or 'ChangeScreenResolution.exe'
 
+local adjust = true
+
 local winframes_blacklist = {}
 local function winframes_parse_blacklist()
    -- use e.g. "--script-opts=winframes-blacklist=25" to have xrand.lua not use 25Hz refresh rate
@@ -74,6 +76,7 @@ end
 local winframes_detect_done = false
 local winframes_modes = {}
 local winframes_connected_outputs = {}
+
 local function winframes_detect_available_rates()
 	if (winframes_detect_done) then
 		return
@@ -250,6 +253,7 @@ local multi_monitor = false
 local winframes_previously_set = {}
 
 local function winframes_set_rate()
+	if not adjust then return end
 
 	local f = mp.get_property_native("container-fps")
 	if ( f == nil or (f == winframes_cfps and not monitor_trigger)) then
@@ -406,6 +410,15 @@ mp.observe_property("fullscreen", "bool",function(_,c)
     winframes_set_old_rate()
    end
 end)
+
+
+local function toggle_adjustment()
+	adjust = not adjust
+	mp.commandv("show-text", "winframes: refresh rate adjustments turned "..(adjust and "on" or "off"), 5000)
+	if adjust and (not opts["wait-for-fullscreen"] or mp.get_property_bool("fullscreen")) then winframes_set_rate() end
+end
+
+mp.add_key_binding("Ctrl+f", "toggle_adjustment", toggle_adjustment)
 
 
 -- and we'll try to revert the refresh rate when mpv is shut down
